@@ -35,8 +35,9 @@ params = {
     # Epsilon value (epsilon-greedy)
     'eps': 1.0,  # Epsilon start value
     'eps_min': 0.1,  # Epsilon end value
-    'eps_decay': 0.991  # Epsilon steps between start and end (linear)
-
+    'eps_decay': 0.999 , # Epsilon steps between start and end (linear)
+    'eps_step':10000,
+    'eps_final':0.1
 }
 
 
@@ -69,7 +70,7 @@ class deepQAgents(game.Agent):
         self.last_score = 0
         self.s = time.time()
         self.last_reward = 0.
-
+        self.count = 0
         self.replay_mem = deque()
         self.last_scores = deque()
 
@@ -142,7 +143,7 @@ class deepQAgents(game.Agent):
                 self.last_reward = 100.
             self.ep_rew += self.last_reward
 
-            # Store last experience into memory 
+            # Store last experience into memory
             experience = (self.last_state, float(self.last_reward), self.last_action, self.current_state, self.terminal)
             self.replay_mem.append(experience)
             if len(self.replay_mem) > self.params['mem_size']:
@@ -161,8 +162,9 @@ class deepQAgents(game.Agent):
         # Next
         self.local_cnt += 1
         self.frame += 1
-        if self.params['eps'] > self.params['eps_min']:
-            self.params['eps'] *= self.params['eps_decay']
+        self.params['eps'] = max(self.params['eps_final'],1.00-float(self.count)/float(self.params['eps_step']))
+        #if self.params['eps'] > self.params['eps_min']:
+         #   self.params['eps'] *= self.params['eps_decay']
 
     def observationFunction(self, state):
         # Do observation
@@ -185,10 +187,9 @@ class deepQAgents(game.Agent):
         # log_file.write("# %4d | steps: %5d | steps_t: %5d | t: %4f | r: %12f | e: %10f " %
         #                (self.numeps, self.local_cnt, self.cnt, time.time() - self.s, self.ep_rew, self.params['eps']))
         # log_file.write("| Q: %10f | won: %r \n" % ((max(self.Q_global, default=float('nan')), self.won)))
-        # sys.stdout.write("# %4d | steps: %5d | steps_t: %5d | t: %4f | r: %12f | e: %10f " %
-        #                  (self.numeps, self.local_cnt, self.cnt, time.time() - self.s, self.ep_rew, self.params['eps']))
-        # sys.stdout.write("| Q: %10f | won: %r \n" % ((max(self.Q_global, default=float('nan')), self.won)))
-        # sys.stdout.flush()
+        sys.stdout.write("# %4d | t: %4f | r: %12f | e: %10f \n" %
+                         (self.numeps, time.time() - self.s, self.ep_rew, self.params['eps']))
+        sys.stdout.flush()
 
     def train(self):
         # Train
@@ -212,7 +213,7 @@ class deepQAgents(game.Agent):
             batch_n = np.array(batch_n)
             batch_t = np.array(batch_t)
 
-            self.qnet.train(batch_s, batch_a, batch_t, batch_n, batch_r)
+            model,self.count = self.qnet.train(batch_s, batch_a, batch_t, batch_n, batch_r)
 
     def get_onehot(self, actions):
         """ Create list of vectors with 1 values at index of action in list """
@@ -313,7 +314,7 @@ class deepQAgents(game.Agent):
 
         # Create observation matrix as a combination of
         # wall, pacman, ghost, food and capsule matrices
-        # width, height = state.data.layout.width, state.data.layout.height 
+        # width, height = state.data.layout.width, state.data.layout.height
         width, height = self.params['width'], self.params['height']
         observation = np.zeros((6, height, width))
 
