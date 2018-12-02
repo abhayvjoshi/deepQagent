@@ -1,6 +1,6 @@
 import numpy as np
 from keras.models import Sequential
-from keras.layers import Dense, Input, Flatten, Embedding
+from keras.layers import Conv2D, Dense, Input, Flatten, Embedding,Activation
 from keras.optimizers import Adam
 from keras.utils.vis_utils import plot_model
 from tqdm import tqdm
@@ -15,7 +15,9 @@ class DQN:
     def build_model(self):
         # Neural Net for Deep-Q learning Model
         model = Sequential()
-        model.add(Dense(24, input_shape=(7, 7, 6, ),activation='relu'))
+        #model.add(Dense(24, input_shape=(7, 7, 6, ),activation='relu'))
+        model.add(Conv2D(32, (3,3), padding='same', input_shape = (7,  7, 6)))
+        model.add(Activation('relu'))
         model.add(Flatten())
         model.add(Dense(24, activation='relu'))
         model.add(Dense(4, activation='linear'))

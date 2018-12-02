@@ -34,8 +34,9 @@ params = {
 
     # Epsilon value (epsilon-greedy)
     'eps': 1.0,  # Epsilon start value
-    'eps_final': 0.1,  # Epsilon end value
-    'eps_step': 10000  # Epsilon steps between start and end (linear)
+    'eps_min': 0.1,  # Epsilon end value
+    'eps_decay': 0.991  # Epsilon steps between start and end (linear)
+
 }
 
 
@@ -76,7 +77,7 @@ class deepQAgents(game.Agent):
         # Exploit / Explore
         if np.random.rand() > self.params['eps']:
             # Exploit action
-            pred_inp = (np.reshape(self.current_state, (1, self.params['width'], self.params['height'], 6)), )
+            pred_inp = np.reshape(self.current_state, (1, self.params['width'], self.params['height'], 6))
             self.Q_pred = self.qnet.model.predict(pred_inp)
             self.Q_global.append(max(self.Q_pred))
             a_winner = np.argwhere(self.Q_pred == np.amax(self.Q_pred))
@@ -160,8 +161,8 @@ class deepQAgents(game.Agent):
         # Next
         self.local_cnt += 1
         self.frame += 1
-        # self.params['eps'] = max(self.params['eps_final'],
-        #                          1.00 - float(self.cnt) / float(self.params['eps_step']))
+        if self.params['eps'] > self.params['eps_min']:
+            self.params['eps'] *= self.params['eps_decay']
 
     def observationFunction(self, state):
         # Do observation
