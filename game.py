@@ -621,7 +621,7 @@ class Game:
                 self.mute(agentIndex)
                 if self.catchExceptions:
                     try:
-                        timed_func = TimeoutFunction(agent.observationFunction, int(self.rules.getMoveTimeout(agentIndex)))
+                        timed_func = TimeoutFunction(agent.seethroughFunction, int(self.rules.getMoveTimeout(agentIndex)))
                         try:
                             start_time = time.time()
                             observation = timed_func(self.state.deepCopy())
@@ -719,7 +719,7 @@ class Game:
             if "final" in dir( agent ) :
                 try:
                     self.mute(agentIndex)
-                    agent.final( self.state )
+                    agent.final(self.state)
                     self.unmute()
                 except Exception,data:
                     if not self.catchExceptions: raise
