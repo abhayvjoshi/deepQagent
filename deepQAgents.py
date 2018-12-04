@@ -13,38 +13,65 @@ import json
 class deepQAgents(game.Agent):
     def __init__(self, args):
         with open('default_config.json') as f:
-            self.params = json.load(f)
-        self.params['width'] = args['width']
-        self.params['height'] = args['height']
-        self.params['num_training'] = args['numTraining']
+            self.parameter = json.load(f)
+        self.parameter['width'] = args['width']
+        self.parameter['height'] = args['height']
+        self.parameter['num_training'] = args['numTraining']
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         self.sess = tf.Session(config = tf.ConfigProto(gpu_options = gpu_options))
-        self.qnet = DQN(self.params)
+        self.nn = DQN(self.parameter)
         self.general_record_time = time.strftime("%a_%d_%b_%Y_%H_%M_%S", time.localtime())
-        self.Q_global = []
-        self.cost_disp = 0
-        self.cnt = self.qnet.sess.run(self.qnet.global_step)
-        self.local_cnt = 0
-        self.numeps = 0
-        self.last_score = 0
+        self.World_Q = []
+        self.val_d = 0
+        self.count = self.nn.sess.run(self.nn.global_step)
+        self.class_count = 0
+        self.num_of_episodes = 0
+        self.prev_result = 0
         self.s = time.time()
-        self.last_reward = 0.
-        self.replay_mem = deque()
-        self.last_scores = deque()
+        self.prev_bonus = 0.
+        self.memory_rep = deque()
+        self.prev_results = deque()
 
 
-    def getMove(self, state):
-        if np.random.rand() > self.params['eps']:
-            self.Q_pred = self.qnet.sess.run(
-                self.qnet.y,
-                feed_dict = {self.qnet.x: np.reshape(self.current_state,
-                                                     (1, self.params['width'], self.params['height'], 6)),
-                             self.qnet.q_t: np.zeros(1),
-                             self.qnet.actions: np.zeros((1, 4)),
-                             self.qnet.terminals: np.zeros(1),
-                             self.qnet.rewards: np.zeros(1)})[0]
+    def final(self, state):
+        self.ep_rew += self.prev_bonus
+        self.terminal = True
+        self.observation_step(state)
+        print("# %4d | steps: %5d | steps_t: %5d | t: %4f | r: %12f | e: %10f \n" %
+                         (self.num_of_episodes, self.class_count, self.count, time.time() - self.s, self.ep_rew, self.parameter['eps']))
+        # sys.stdout.flush()
 
-            self.Q_global.append(max(self.Q_pred))
+    def getAction(self, state):
+        move = self.getMove(state)
+        legal = state.getLegalActions(0)
+        if move not in legal:
+            move = Directions.STOP
+        return move
+
+    def get_direction(self, val):
+        # if value == 0:
+        #     return Directions.NORTH
+        # elif value == 1:
+        #     return Directions.SOUTH
+        # elif value == 2:
+        #     return Directions.EAST
+        # else:
+        #     return Directions.WEST
+        return Directions.NORTH if val == 0. else Directions.EAST if val == 1. else Directions.SOUTH if val == 2. else Directions.WEST
+
+
+    def getMove(self, s):
+        if np.random.rand() > self.parameter['eps']:
+            self.Q_pred = self.nn.sess.run(
+                self.nn.y,
+                feed_dict = {self.nn.x: np.reshape(self.present_st,
+                                                   (1, self.parameter['width'], self.parameter['height'], 6)),
+                             self.nn.q_t: np.zeros(1),
+                             self.nn.actions: np.zeros((1, 4)),
+                             self.nn.terminals: np.zeros(1),
+                             self.nn.rewards: np.zeros(1)})[0]
+
+            self.World_Q.append(max(self.Q_pred))
             a_winner = np.argwhere(self.Q_pred == np.amax(self.Q_pred))
 
             if len(a_winner) > 1:
@@ -55,116 +82,19 @@ class deepQAgents(game.Agent):
                     a_winner[0][0])
         else:
             move = self.get_direction(np.random.randint(0, 4))
-        self.last_action = self.get_value(move)
+        self.prev_act = self.get_value(move)
         return move
 
-    def get_value(self, direction):
-        if direction == Directions.NORTH:
-            return 0
-        elif direction == Directions.SOUTH:
-            return 1
-        elif direction == Directions.EAST:
-            return 2
-        else:
-            return 3
 
-    def get_direction(self, value):
-        if value == 0:
-            return Directions.NORTH
-        elif value == 1:
-            return Directions.SOUTH
-        elif value == 2:
-            return Directions.EAST
-        else:
-            return Directions.WEST
-
-    def observation_step(self, state):
-        if self.last_action is not None:
-            self.last_state = np.copy(self.current_state)
-            self.current_state = self.getStateMatrices(state)
-            self.current_score = state.getScore()
-            reward = self.current_score - self.last_score
-            self.last_score = self.current_score
-            if reward > 20:
-                self.last_reward = 50.
-            elif reward > 0:
-                self.last_reward = 10.
-            elif reward < -10:
-                self.last_reward = -500.
-                self.won = False
-            elif reward < 0:
-                self.last_reward = -1.
-            if(self.terminal and self.won):
-                self.last_reward = 100.
-            self.ep_rew += self.last_reward
-            experience = (self.last_state, float(self.last_reward), self.last_action, self.current_state, self.terminal)
-            self.replay_mem.append(experience)
-            if len(self.replay_mem) > self.params['mem_size']:
-                self.replay_mem.popleft()
-            self.train()
-        self.local_cnt += 1
-        self.frame += 1
-        self.params['eps'] = max(self.params['eps_final'],
-                                 1.00 - float(self.cnt)/ float(self.params['eps_step']))
-
-
-    def observationFunction(self, state):
-        self.terminal = False
-        self.observation_step(state)
-        return state
-
-    def final(self, state):
-        self.ep_rew += self.last_reward
-        self.terminal = True
-        self.observation_step(state)
-        sys.stdout.write("# %4d | steps: %5d | steps_t: %5d | t: %4f | r: %12f | e: %10f \n" %
-                         (self.numeps,self.local_cnt, self.cnt, time.time()-self.s, self.ep_rew, self.params['eps']))
-        sys.stdout.flush()
-
-    def train(self):
-        if (self.local_cnt > self.params['train_start']):
-            batch = random.sample(self.replay_mem, self.params['batch_size'])
-            batch_s = []
-            batch_r = []
-            batch_a = []
-            batch_n = []
-            batch_t = []
-            for i in batch:
-                batch_s.append(i[0])
-                batch_r.append(i[1])
-                batch_a.append(i[2])
-                batch_n.append(i[3])
-                batch_t.append(i[4])
-            batch_s = np.array(batch_s)
-            batch_r = np.array(batch_r)
-            batch_a = self.get_onehot(np.array(batch_a))
-            batch_n = np.array(batch_n)
-            batch_t = np.array(batch_t)
-            self.cnt, self.cost_disp = self.qnet.train(batch_s, batch_a, batch_t, batch_n, batch_r)
-
-
-    def get_onehot(self, actions):
-        actions_onehot = np.zeros((self.params['batch_size'], 4))
-        for i in range(len(actions)):
-            actions_onehot[i][int(actions[i])] = 1
-        return actions_onehot
-
-    def mergeStateMatrices(self, stateMatrices):
-        stateMatrices = np.swapaxes(stateMatrices, 0, 2)
-        total = np.zeros((7, 7))
-        for i in range(len(stateMatrices)):
-            total += (i + 1) * stateMatrices[i] / 6
-        return total
-
-    def getStateMatrices(self, state):
-        width, height = self.params['width'], self.params['height']
+    def getStateMatrices(self, s):
+        width, height = self.parameter['width'], self.parameter['height']
         input_matrix = np.zeros((6, width, height))
         pacman_matrix = np.zeros((width, height))
         ghost_matrix = np.zeros((width, height))
         scared_matrix = np.zeros((width, height))
         capsule_matrix = np.zeros((width, height))
-        input_matrix[0] = np.array(state.data.layout.walls.data, int)
-        for i in state.data.agentStates:
+        input_matrix[0] = np.array(s.data.layout.walls.data, int)
+        for i in s.data.agentStates:
             if i.isPacman:
                 pacman_pos = i.getPosition()
                 pacman_matrix[int(pacman_pos[0])][int(pacman_pos[1])] = 1
@@ -178,33 +108,106 @@ class deepQAgents(game.Agent):
         input_matrix[1] = pacman_matrix
         input_matrix[2] = ghost_matrix
         input_matrix[3] = scared_matrix
-        input_matrix[4] = np.array(state.data.food.data, int)
-        for i in state.data.capsules:
+        input_matrix[4] = np.array(s.data.food.data, int)
+        for i in s.data.capsules:
             capsule_matrix[i[0]][i[1]] = 1
         input_matrix[5] = capsule_matrix
         return np.swapaxes(input_matrix, 0, 2)
 
+    def get_value(self, dir):
+        # if direction == Directions.NORTH:
+        #     return 0
+        # elif direction == Directions.SOUTH:
+        #     return 1
+        # elif direction == Directions.EAST:
+        #     return 2
+        # else:
+        #     return 3
+        return 0 if dir == Directions.NORTH else 1 if dir == Directions.EAST else 2 if dir == Directions.SOUTH else 3
+
+    def mergeStateMatrices(self, stateMatrices):
+        stateMatrices = np.swapaxes(stateMatrices, 0, 2)
+        total = np.zeros((7, 7))
+        for i in range(len(stateMatrices)):
+            total += (i + 1) * stateMatrices[i] / 6
+        return total
+
+
+    def observation_step(self, s):
+        if self.prev_act is not None:
+            self.prev_st = np.copy(self.present_st)
+            self.present_st = self.getStateMatrices(s)
+            self.present_result = s.getScore()
+            bonus = self.present_result - self.prev_result
+            self.prev_result = self.present_result
+            if bonus > 20:
+                self.prev_bonus = 50.
+            elif bonus > 0:
+                self.prev_bonus = 10.
+            elif bonus < -10:
+                self.prev_bonus = -500.
+                self.won = False
+            elif bonus < 0:
+                self.prev_bonus = -1.
+            if(self.terminal and self.won):
+                self.prev_bonus = 100.
+            self.ep_rew += self.prev_bonus
+            exp = (self.prev_st, float(self.prev_bonus), self.prev_act, self.present_st, self.terminal)
+            self.memory_rep.append(exp)
+            if len(self.memory_rep) > self.parameter['mem_size']:
+                self.memory_rep.popleft()
+            self.train()
+        self.class_count += 1
+        self.frame += 1
+        self.parameter['eps'] = max(self.parameter['eps_final'],
+                                    1.00 - float(self.count) / float(self.parameter['eps_step']))
+
+    def observationFunction(self, s):
+        self.terminal = False
+        self.observation_step(s)
+        return s
+
+    def obtain_1hot(self, act):
+        actions_onehot = np.zeros((self.parameter['batch_size'], 4))
+        for i in range(len(act)):
+            actions_onehot[i][int(act[i])] = 1
+        return actions_onehot
+
     def registerInitialState(self, state):
-        self.last_score = 0
-        self.current_score = 0
-        self.last_reward = 0.
         self.ep_rew = 0
-        self.last_state = None
-        self.current_state = self.getStateMatrices(state)
-        self.last_action = None
-        self.terminal = None
-        self.won = True
-        self.Q_global = []
         self.delay = 0
         self.frame = 0
-        self.numeps += 1
+        self.num_of_episodes += 1
+        self.present_result = 0
+        self.present_st = self.getStateMatrices(state)
+        self.prev_bonus = 0.
+        self.prev_act = None
+        self.prev_result = 0
+        self.prev_st = None
+        self.terminal = None
+        self.World_Q = []
+        self.won = True
 
-    def getAction(self, state):
-        move = self.getMove(state)
-        legal = state.getLegalActions(0)
-        if move not in legal:
-            move = Directions.STOP
-        return move
+    def train(self):
+        if (self.class_count > self.parameter['train_start']):
+            bitch = random.sample(self.memory_rep, self.parameter['batch_size'])
+            b_s,b_r,b_a,b_n,b_t  = [],[],[],[],[]
+             # = []
+             # = []
+             # = []
+             # = []
+            for i in bitch:
+                b_s.append(i[0])
+                b_r.append(i[1])
+                b_a.append(i[2])
+                b_n.append(i[3])
+                b_t.append(i[4])
+            b_a = self.obtain_1hot(np.array(b_a))
+            b_n = np.array(b_n)
+            b_r = np.array(b_r)
+            b_s = np.array(b_s)
+            b_t = np.array(b_t)
+            self.count, self.val_d = self.nn.train(b_s, b_a, b_t, b_n, b_r)
 
 class DQN:
     def __init__(self, params):
