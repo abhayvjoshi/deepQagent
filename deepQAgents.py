@@ -3,34 +3,26 @@ import random
 import numpy as np
 from pacman import Directions
 from collections import deque
-import sys
 import time
 import game
 import json
-
 
 
 class deepQAgents(game.Agent):
     def __init__(self, args):
         with open('default_config.json') as f:
             self.parameter = json.load(f)
-        self.parameter['width'] = args['width']
-        self.parameter['height'] = args['height']
+        self.parameter['width'],self.parameter['height'] = args['width'],args['height']
         self.parameter['num_training'] = args['numTraining']
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1)
         self.sess = tf.Session(config = tf.ConfigProto(gpu_options = gpu_options))
         self.nn = DQN(self.parameter)
         self.general_record_time = time.strftime("%a_%d_%b_%Y_%H_%M_%S", time.localtime())
         self.World_Q = []
-        self.val_d = 0
         self.count = self.nn.sess.run(self.nn.global_step)
-        self.class_count = 0
-        self.num_of_episodes = 0
-        self.prev_result = 0
+        self.val_d,self.class_count,self.num_of_episodes,self.prev_result,self.prev_bonus = 0,0,0,0,0.
         self.s = time.time()
-        self.prev_bonus = 0.
-        self.memory_rep = deque()
-        self.prev_results = deque()
+        self.memory_rep,self.prev_results = deque(),deque()
 
 
     def final(self, state):
@@ -39,26 +31,15 @@ class deepQAgents(game.Agent):
         self.observation_step(state)
         print("# %4d | steps: %5d | steps_t: %5d | t: %4f | r: %12f | e: %10f \n" %
                          (self.num_of_episodes, self.class_count, self.count, time.time() - self.s, self.ep_rew, self.parameter['eps']))
-        # sys.stdout.flush()
 
-    def getAction(self, state):
-        move = self.getMove(state)
-        legal = state.getLegalActions(0)
-        if move not in legal:
-            move = Directions.STOP
-        return move
+    def getAction(self, s):
+        step_taken = self.getMove(s)
+        if step_taken not in s.getLegalActions(0):
+            step_taken = Directions.STOP
+        return step_taken
 
     def get_direction(self, val):
-        # if value == 0:
-        #     return Directions.NORTH
-        # elif value == 1:
-        #     return Directions.SOUTH
-        # elif value == 2:
-        #     return Directions.EAST
-        # else:
-        #     return Directions.WEST
         return Directions.NORTH if val == 0. else Directions.EAST if val == 1. else Directions.SOUTH if val == 2. else Directions.WEST
-
 
     def getMove(self, s):
         if np.random.rand() > self.parameter['eps']:
@@ -73,18 +54,11 @@ class deepQAgents(game.Agent):
 
             self.World_Q.append(max(self.Q_pred))
             a_winner = np.argwhere(self.Q_pred == np.amax(self.Q_pred))
-
-            if len(a_winner) > 1:
-                move = self.get_direction(
-                    a_winner[np.random.randint(0, len(a_winner))][0])
-            else:
-                move = self.get_direction(
-                    a_winner[0][0])
+            step_taken = self.get_direction(a_winner[np.random.randint(0, len(a_winner))][0]) if len(a_winner) > 1 else self.get_direction(a_winner[0][0])
         else:
-            move = self.get_direction(np.random.randint(0, 4))
-        self.prev_act = self.get_value(move)
-        return move
-
+            step_taken = self.get_direction(np.random.randint(0, 4))
+        self.prev_act = self.get_value(step_taken)
+        return step_taken
 
     def getStateMatrices(self, s):
         width, height = self.parameter['width'], self.parameter['height']
@@ -115,22 +89,13 @@ class deepQAgents(game.Agent):
         return np.swapaxes(input_matrix, 0, 2)
 
     def get_value(self, dir):
-        # if direction == Directions.NORTH:
-        #     return 0
-        # elif direction == Directions.SOUTH:
-        #     return 1
-        # elif direction == Directions.EAST:
-        #     return 2
-        # else:
-        #     return 3
         return 0 if dir == Directions.NORTH else 1 if dir == Directions.EAST else 2 if dir == Directions.SOUTH else 3
 
-    def mergeStateMatrices(self, stateMatrices):
-        stateMatrices = np.swapaxes(stateMatrices, 0, 2)
-        total = np.zeros((7, 7))
-        for i in range(len(stateMatrices)):
-            total += (i + 1) * stateMatrices[i] / 6
-        return total
+    def mergeStateMatrices(self, stMat):
+        stMat,sum_all = np.swapaxes(stMat, 0, 2), np.zeros((7, 7))
+        for i in range(len(stMat)):
+            sum_all += (i + 1) * stMat[i] / 6
+        return sum_all
 
 
     def observation_step(self, s):
@@ -174,17 +139,11 @@ class deepQAgents(game.Agent):
         return actions_onehot
 
     def registerInitialState(self, state):
-        self.ep_rew = 0
-        self.delay = 0
-        self.frame = 0
-        self.num_of_episodes += 1
-        self.present_result = 0
+        self.ep_rew,self.delay,self.frame = 0,0,0
+        self.present_result,self.prev_result,self.prev_bonus = 0,0,0.
+        self.prev_act,self.prev_st,self.terminal = None,None, None
         self.present_st = self.getStateMatrices(state)
-        self.prev_bonus = 0.
-        self.prev_act = None
-        self.prev_result = 0
-        self.prev_st = None
-        self.terminal = None
+        self.num_of_episodes += 1
         self.World_Q = []
         self.won = True
 
@@ -192,21 +151,13 @@ class deepQAgents(game.Agent):
         if (self.class_count > self.parameter['train_start']):
             bitch = random.sample(self.memory_rep, self.parameter['batch_size'])
             b_s,b_r,b_a,b_n,b_t  = [],[],[],[],[]
-             # = []
-             # = []
-             # = []
-             # = []
             for i in bitch:
                 b_s.append(i[0])
                 b_r.append(i[1])
                 b_a.append(i[2])
                 b_n.append(i[3])
                 b_t.append(i[4])
-            b_a = self.obtain_1hot(np.array(b_a))
-            b_n = np.array(b_n)
-            b_r = np.array(b_r)
-            b_s = np.array(b_s)
-            b_t = np.array(b_t)
+            b_a,b_n,b_r,b_s,b_t = self.obtain_1hot(np.array(b_a)),np.array(b_n),np.array(b_r),np.array(b_s),np.array(b_t)
             self.count, self.val_d = self.nn.train(b_s, b_a, b_t, b_n, b_r)
 
 class DQN:
