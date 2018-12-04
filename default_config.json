@@ -1,0 +1,12 @@
+{
+
+  "save_interval" : 10000,
+  "train_start": 5000,
+  "batch_size": 32,
+  "mem_size": 100000,
+  "discount": 0.95,
+  "lr": 0.002,
+  "eps": 1.0,
+  "eps_final": 0.1,
+  "eps_step": 10000
+}
