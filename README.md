@@ -18,7 +18,7 @@ Example CLI:
 
     python2 pacman.py -p deepQAgents -x 2000 -n 2010 -l smallGrid
 
-Values such as epsilon can be altered in defalut_config.json
+Values such as epsilon can be altered in default_config.json
 
 Team:
   1. Abhay V Joshi
