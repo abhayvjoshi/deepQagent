@@ -1,7 +1,7 @@
 # CSE 571 AI: deepQAgent
 ## Deep Q Agent built to learn Q values and corresponding actions for Pacman Agent
 
-###Requirements
+### Requirements
 1. Python 2.7
 2. Numpy
 3. Tensorflow
